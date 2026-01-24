@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Mock Interviewer</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Poppins", sans-serif;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: background 0.4s;
+    }
+
+    body.light {
+      background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+      color: #000;
+    }
+
+    .app-container {
+      width: 95%;
+      max-width: 1000px;
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    header h1 { margin: 0; font-size: 1.5rem; }
+
+    .controls select {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: none;
+      outline: none;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 10px 0;
+    }
+
+    #timer { font-weight: bold; }
+
+    #chat-box {
+      flex: 1;
+      background: rgba(0,0,0,0.25);
+      border-radius: 15px;
+      padding: 15px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+
+    .message {
+      max-width: 75%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      margin: 8px 0;
+      line-height: 1.4;
+    }
+
+    .bot {
+      background: linear-gradient(135deg, #4facfe, #00f2fe);
+      color: #000;
+      align-self: flex-start;
+    }
+
+    .user {
+      background: linear-gradient(135deg, #43e97b, #38f9d7);
+      color: #000;
+      align-self: flex-end;
+    }
+
+    .score-label {
+      font-size: 0.8rem;
+      color: #222;
+      margin-top: 4px;
+      font-weight: bold;
+    }
+
+    .progress-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(135deg, #43e97b, #38f9d7);
+      transition: width 0.4s;
+    }
+
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 8px 14px;
+      cursor: pointer;
+      background: linear-gradient(135deg, #ff9966, #ff5e62);
+      color: #000;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+
+    button.secondary {
+      background: linear-gradient(135deg, #36d1dc, #5b86e5);
+    }
+
+    #status {
+      font-size: 0.85rem;
+      color: #e0e0e0;
+      margin-left: auto;
+    }
+
+    #dashboard, #growthBox {
+      display: none;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-container">
+
+    <header>
+      <h1>🎤 AI Mock Interviewer</h1>
+      <div class="controls">
+        <select id="roleSelect">
+          <option value="frontend">Frontend</option>
+          <option value="backend">Backend</option>
+          <option value="fullstack">Full Stack</option>
+          <option value="data">Data Scientist</option>
+          <option value="hr">HR</option>
+        </select>
+
+        <select id="difficultySelect">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+
+        <select id="topicSelect">
+          <option value="javascript">JavaScript</option>
+          <option value="ds">Data Structures</option>
+          <option value="system">System Design</option>
+          <option value="sql">SQL</option>
+          <option value="hr">HR</option>
+        </select>
+      </div>
+    </header>
+
+    <div class="top-bar">
+      <button class="secondary" onclick="toggleTheme()">🌓 Theme</button>
+      <div id="timer">⏱ 00:30</div>
+    </div>
+
+    <div class="progress-container">
+      <div id="progress-bar" class="progress-bar"></div>
+    </div>
+
+    <div id="chat-box"></div>
+
+    <div>
+      <button onclick="startInterview()">Start</button>
+      <button class="secondary" onclick="startListening()">🎙 Speak</button>
+      <button class="secondary" onclick="endInterview()">End</button>
+      <span id="status">Click Start</span>
+    </div>
+
+    <div id="dashboard">
+      <h3>📊 Performance Dashboard</h3>
+      <p>Average Score: <span id="avgScore"></span></p>
+      <p>Total Questions: <span id="totalQ"></span></p>
+      <p>Filler Words: <span id="fillers"></span></p>
+      <p>Rating: <span id="rating"></span></p>
+      <p>Hiring Probability: <span id="hiringProb"></span>%</p>
+
+      <canvas id="scoreChart" height="120"></canvas>
+    </div>
+
+    <div id="growthBox">
+      <h3>📈 Growth Tracker</h3>
+      <canvas id="growthChart" height="120"></canvas>
+    </div>
+
+  </div>
+
+<script>
+let questionCount = 0;
+let timeLeft = 50;
+let timerInterval = null;
+let interviewHistory = [];
+const maxQuestions = 10;
+
+let chartInstance = null;
+let growthChart = null;
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const recognition = new SpeechRecognition();
+recognition.lang = "en-US";
+
+function appendMessage(sender, text, score = null) {
+  const box = document.getElementById("chat-box");
+  const div = document.createElement("div");
+  div.className = "message " + sender;
+
+  if (sender === "bot" && score !== null) {
+    div.innerHTML = `${text}<div class="score-label">📝 Score: ${score}/10</div>`;
+  } else {
+    div.textContent = text;
+  }
+
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+
+  // 🔊 Interviewer voice
+  if (sender === "bot") {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    const voices = speechSynthesis.getVoices();
+    const preferred = voices.find(v => v.lang.includes("en"));
+    if (preferred) utterance.voice = preferred;
+
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+function updateProgress() {
+  const percent = Math.min((questionCount / maxQuestions) * 100, 100);
+  document.getElementById("progress-bar").style.width = percent + "%";
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timeLeft = 30;
+  document.getElementById("timer").innerText = "⏱ 00:" + timeLeft;
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    document.getElementById("timer").innerText = "⏱ 00:" + timeLeft;
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      sendAnswer("(No answer)");
+    }
+  }, 1000);
+}
+
+async function startInterview() {
+  questionCount = 0;
+  interviewHistory = [];
+  updateProgress();
+  document.getElementById("chat-box").innerHTML = "";
+
+  const role = roleSelect.value;
+  const difficulty = difficultySelect.value;
+  const topic = topicSelect.value;
+
+  const res = await fetch("/start_interview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role, difficulty, topic })
+  });
+
+  const data = await res.json();
+  appendMessage("bot", data.response);
+  interviewHistory.push({ question: data.response });
+  startTimer();
+}
+
+async function sendAnswer(text) {
+  appendMessage("user", text);
+  interviewHistory[interviewHistory.length - 1].answer = text;
+
+  const res = await fetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: text })
+  });
+
+  const data = await res.json();
+
+  appendMessage("bot", data.response, data.score);
+
+  interviewHistory[interviewHistory.length - 1].score = data.score || 7;
+
+  questionCount++;
+  updateProgress();
+  startTimer();
+
+  if (questionCount >= maxQuestions) endInterview();
+  else interviewHistory.push({ question: data.response });
+}
+
+recognition.onresult = (e) => sendAnswer(e.results[0][0].transcript);
+function startListening() { recognition.start(); }
+
+async function loadDashboard() {
+  const res = await fetch("/analytics");
+  const data = await res.json();
+  if (data.error) return;
+
+  dashboard.style.display = "block";
+  growthBox.style.display = "block";
+
+  avgScore.innerText = data.average_score;
+  totalQ.innerText = data.total_questions;
+  fillers.innerText = data.total_filler_words;
+  rating.innerText = data.rating;
+  hiringProb.innerText = data.hiring_probability;
+
+  renderScoreChart(data.chart_scores);
+  renderGrowthTracker(data.sessions);
+}
+
+function renderScoreChart(scores) {
+  const ctx = scoreChart.getContext("2d");
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: scores.map((_, i) => "Q" + (i + 1)),
+      datasets: [{ label: "Score", data: scores, borderWidth: 2 }]
+    },
+    options: { scales: { y: { min: 0, max: 10 } } }
+  });
+}
+
+function renderGrowthTracker(sessions) {
+  const ctx = growthChart.getContext("2d");
+  if (growthChart) growthChart.destroy();
+
+  growthChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: sessions.map((_, i) => "Session " + (i + 1)),
+      datasets: [
+        { label: "Avg Score", data: sessions.map(s => s.avg_score), borderWidth: 2 },
+        { label: "Hiring %", data: sessions.map(s => s.hiring_probability), borderWidth: 2 }
+      ]
+    },
+    options: { scales: { y: { min: 0, max: 100 } } }
+  });
+}
+
+function endInterview() {
+  clearInterval(timerInterval);
+  appendMessage("bot", "Interview completed! Generating analytics...");
+  loadDashboard();
+}
+
+function toggleTheme() {
+  document.body.classList.toggle("light");
+}
+</script>
+</body>
+</html>
