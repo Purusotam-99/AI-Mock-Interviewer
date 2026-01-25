@@ -1,140 +1,204 @@
 import os
 import json
 import random
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
 import google.generativeai as genai
 from dotenv import load_dotenv
 
 # Load API Key
 load_dotenv()
 api_key = os.getenv("GOOGLE_API_KEY")
-
-if not api_key:
-    raise ValueError("No API key found! Check your .env file.")
+if not api_key: raise ValueError("No API key found! Check your .env file.")
 
 genai.configure(api_key=api_key)
-
 app = Flask(__name__)
+app.secret_key = "super_secret_key_for_session" 
 
-# --- OPTIMIZED CONFIGURATION ---
-# We force the model to output strict JSON. This combines 3 calls into 1.
-generation_config = {
-    "temperature": 0.7,
-    "top_p": 0.95,
-    "top_k": 64,
-    "max_output_tokens": 2000,
-    "response_mime_type": "application/json", # <--- MAGIC LINE
+# --- KNOWLEDGE BASE (Concepts & Comparisons) ---
+KNOWLEDGE_BASE = {
+    "javascript": {
+        "concepts": [
+            "Closure", "Event Loop", "Hoisting", "Promise", "Async/Await", 
+            "Prototype Chain", "Shadow DOM", "Event Bubbling", "Event Capturing",
+            "Currying", "Memoization", "Debouncing", "Throttling", "Service Worker",
+            "Web Worker", "CORS", "Strict Mode", "IIFE", "This Keyword", 
+            "Generators", "WeakMap", "Set", "Proxy Object", "Event Delegation", 
+            "Higher-Order Functions", "Temporal Dead Zone", "Destructuring", 
+            "Rest/Spread Operator", "Modules (ES6)", "Callback Hell"
+        ],
+        "comparisons": [
+            ("var", "let"), ("var", "const"), ("let", "const"),
+            ("==", "==="), ("null", "undefined"), ("Arrow Function", "Regular Function"),
+            ("Map", "Object"), ("Promise", "Callback"), ("localStorage", "sessionStorage")
+        ]
+    },
+    "dsa": {
+        "concepts": [
+            "Array", "Linked List", "Stack", "Queue", "Hash Table", 
+            "Binary Search Tree", "Min Heap", "Max Heap", "Graph", "Trie", 
+            "Quick Sort", "Merge Sort", "Binary Search", "BFS", "DFS", 
+            "Dynamic Programming", "Greedy Algorithm", "Recursion", 
+            "Two Pointers", "Sliding Window", "Backtracking"
+        ],
+        "comparisons": [
+            ("Array", "Linked List"), ("Stack", "Queue"), ("BFS", "DFS"),
+            ("Quick Sort", "Merge Sort"), ("Hash Map", "BST"),
+            ("Recursion", "Iteration"), ("Time Complexity", "Space Complexity")
+        ]
+    },
+    "sql": {
+        "concepts": [
+            "Primary Key", "Foreign Key", "Indexing", "Normalization", "ACID", 
+            "View", "Stored Procedure", "Trigger", "Cursor", "Subquery", 
+            "Window Functions", "CTE", "Inner Join", "Left Join", "Union", 
+            "Group By", "Order By"
+        ],
+        "comparisons": [
+            ("WHERE", "HAVING"), ("DELETE", "TRUNCATE"), ("CHAR", "VARCHAR"),
+            ("SQL", "NoSQL"), ("Clustered Index", "Non-Clustered Index"),
+            ("Inner Join", "Outer Join"), ("Union", "Union All")
+        ]
+    },
+    "python": {
+        "concepts": ["Decorator", "Generator", "Lambda", "GIL", "List Comprehension"],
+        "comparisons": [("List", "Tuple"), ("is", "=="), ("Deep Copy", "Shallow Copy")]
+    }
 }
 
-# Updated System Instruction: Ask for everything in one go.
-system_prompt = """
-You are a professional technical interviewer. 
-For every user input, you must return a JSON object with exactly these 3 fields:
-1. "reply": Your conversational response to the candidate. Keep it professional but encouraging. Ask the next question here.
-2. "feedback": Specific grammar or technical feedback on their last answer. If it was perfect, say "Excellent phrasing."
-3. "score": An integer from 1 to 10 based on the quality of their answer.
-
-Example Output:
-{
-    "reply": "That is correct. Now, can you explain polymorphism?",
-    "feedback": "You missed the 'self' parameter in your class method.",
-    "score": 7
+TEMPLATE_POOLS = {
+    "easy": [
+        "Can you explain the concept of '{concept}' in simple terms?",
+        "What is the fundamental purpose of '{concept}'?",
+        "In your own words, define '{concept}'."
+    ],
+    "medium": [
+        "What are the main use cases for '{concept}'?",
+        "Why would a developer choose to use '{concept}' over alternatives?",
+        "What are the advantages and disadvantages of using '{concept}'?"
+    ],
+    "hard": [
+        "How does '{concept}' work internally under the hood?",
+        "Can you explain the potential pitfalls or edge cases when using '{concept}'?"
+    ],
+    "practical": [
+        "Can you describe a real-world scenario where you would use '{concept}'?",
+        "If you were optimizing a system for performance, how would '{concept}' help?"
+    ]
 }
-"""
 
-# Use the FLASH model for speed (it supports JSON mode natively)
-model = genai.GenerativeModel(
-    model_name="gemini-3-flash-preview",
-    generation_config=generation_config,
-    system_instruction=system_prompt
-)
+def get_distribution(count):
+    if count == 5:  return {"easy": 2, "medium": 2, "hard": 1, "practical": 0}
+    if count == 8:  return {"easy": 2, "medium": 3, "hard": 2, "practical": 1}
+    if count == 12: return {"easy": 3, "medium": 4, "hard": 3, "practical": 2}
+    return {"easy": count, "medium": 0, "hard": 0, "practical": 0}
 
-# Store chat history in memory
-chat_session = None
-performance_data = []
+def generate_interview_questions(topic, count):
+    data = KNOWLEDGE_BASE.get(topic, KNOWLEDGE_BASE["javascript"])
+    dist = get_distribution(count)
+    questions = []
+    
+    # --- FIX: NO REPEATS GUARANTEED ---
+    # We grab ALL concepts, shuffle them, and then pop them one by one.
+    available_concepts = data["concepts"][:]
+    random.shuffle(available_concepts)
+    
+    def get_concept():
+        if available_concepts:
+            return available_concepts.pop()
+        return "Generic Concept" # Fallback if we run out (unlikely)
+
+    # 1. Easy
+    for _ in range(dist["easy"]):
+        questions.append(random.choice(TEMPLATE_POOLS["easy"]).format(concept=get_concept()))
+
+    # 2. Medium
+    for _ in range(dist["medium"]):
+        questions.append(random.choice(TEMPLATE_POOLS["medium"]).format(concept=get_concept()))
+
+    # 3. Hard
+    for _ in range(dist["hard"]):
+        if random.random() < 0.5 and "comparisons" in data and data["comparisons"]:
+            pair = random.choice(data["comparisons"])
+            questions.append(f"What is the key technical difference between '{pair[0]}' and '{pair[1]}'?")
+        else:
+            questions.append(random.choice(TEMPLATE_POOLS["hard"]).format(concept=get_concept()))
+
+    # 4. Practical
+    for _ in range(dist["practical"]):
+        questions.append(random.choice(TEMPLATE_POOLS["practical"]).format(concept=get_concept()))
+    
+    return questions
+
+# --- FLASK ROUTES ---
+generation_config = { "temperature": 0.7, "response_mime_type": "application/json" }
+model = genai.GenerativeModel("gemini-3-flash-preview", generation_config=generation_config)
 
 @app.route('/')
-def home():
-    return render_template('index.html')
+def home(): return render_template('index.html')
 
 @app.route('/start_interview', methods=['POST'])
 def start_interview():
-    global chat_session, performance_data
-    performance_data = [] # Reset data
+    data = request.json
+    topic = data.get("topic", "javascript")
+    count = int(data.get("length", 8))
     
-    # Start a new chat session
-    chat_session = model.start_chat(history=[])
+    interview_questions = generate_interview_questions(topic, count)
     
-    # Send an initial hidden prompt to kickstart the JSON behavior
-    try:
-        response = chat_session.send_message("The interview is starting. Introduce yourself and ask the first question.")
-        data = json.loads(response.text)
-        return jsonify(data)
-    except Exception as e:
-        print(f"Error starting interview: {e}")
-        # Fallback if AI fails
-        return jsonify({
-            "reply": "Hello! I am ready. Let's start with a simple question: What is a variable?",
-            "feedback": "None",
-            "score": 0
-        })
+    session['questions_queue'] = interview_questions
+    session['current_index'] = 0
+    session['history'] = [] 
+    
+    return jsonify({"reply": f"Hello! I've prepared {count} unique {topic} questions. Let's begin. {interview_questions[0]}"})
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    global performance_data
     user_input = request.json.get('message')
+    questions_queue = session.get('questions_queue', [])
+    idx = session.get('current_index', 0)
+    history = session.get('history', [])
     
-    if not user_input:
-        return jsonify({"error": "No input provided"}), 400
-
-    try:
-        # SINGLE API CALL (Replaces the 3 separate calls)
-        response = chat_session.send_message(user_input)
+    if idx < len(questions_queue):
+        current_q = questions_queue[idx]
+        history.append(f"Q: {current_q}\nA: {user_input}")
+        session['history'] = history
+    
+    idx += 1
+    session['current_index'] = idx
+    
+    if idx >= len(questions_queue):
+        return jsonify({"reply": "Interview Complete! Click End to see your Heatmap.", "feedback": "Done"})
         
-        # Parse the JSON response
-        data = json.loads(response.text)
-        
-        # Save data for analytics
-        performance_data.append({
-            "question": "Previous Question", # Simplified for now
-            "answer": user_input,
-            "score": data.get("score", 0),
-            "feedback": data.get("feedback", "")
-        })
-        
-        return jsonify({
-            "reply": data.get("reply"),
-            "feedback": data.get("feedback"),
-            "score": data.get("score")
-        })
+    return jsonify({"reply": questions_queue[idx]})
 
-    except Exception as e:
-        print(f"Server Error: {e}")
-        return jsonify({
-            "reply": "I am having trouble connecting. Please check the terminal.",
-            "feedback": "Error",
-            "score": 0
-        }), 500
-
-@app.route("/analytics", methods=["GET"])
+@app.route('/analytics', methods=['GET'])
 def analytics():
-    if not performance_data:
-        return jsonify({"error": "No interview data"}), 400
-
-    total_score = sum(item["score"] for item in performance_data)
-    avg_score = round(total_score / len(performance_data), 2)
-
-    rating = "Excellent" if avg_score >= 8 else "Good" if avg_score >= 6 else "Needs Improvement"
-    hiring_probability = min(95, int(avg_score * 10))
-
-    return jsonify({
-        "average_score": avg_score,
-        "total_questions": len(performance_data),
-        "rating": rating,
-        "hiring_probability": hiring_probability,
-        "details": performance_data
-    })
+    history = session.get("history", [])
+    if not history: return jsonify({"error": "No history"}), 400
+    
+    full_transcript = "\n".join(history)
+    
+    # --- NEW: ADVANCED ANALYTICS PROMPT ---
+    prompt = f"""
+    Analyze this technical interview transcript.
+    Return a JSON object with:
+    1. "average_score": (Integer 1-10)
+    2. "hiring_probability": (Integer 0-100)
+    3. "rating": (String)
+    4. "details": List of objects {{"score": int, "feedback": string}} for each question.
+    5. "weak_concepts": List of strings (The specific topics the candidate struggled with).
+    6. "strong_concepts": List of strings (Topics they explained well).
+    7. "missed_keywords": List of strings (Important technical terms they forgot to mention).
+    
+    TRANSCRIPT:
+    {full_transcript}
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        return jsonify(json.loads(response.text))
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"error": "Failed to generate report"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
-
