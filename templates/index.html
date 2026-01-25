@@ -57,7 +57,7 @@
       gap: 20px;
     }
 
-    /* --- HEADER (MATCHING YOUR IMAGE) --- */
+    /* --- HEADER --- */
     header {
       display: flex;
       justify-content: space-between;
@@ -67,33 +67,10 @@
       padding-bottom: 20px;
     }
 
-    .title-group {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .logo-icon {
-      font-size: 2rem;
-    }
-
-    h1 {
-      margin: 0;
-      font-weight: 700;
-      font-size: 1.8rem;
-      letter-spacing: 0.5px;
-      line-height: 1;
-    }
-
-    .pro-badge {
-      font-size: 0.5em;
-      font-weight: 700;
-      text-transform: uppercase;
-      opacity: 0.6; /* The greyish look */
-      margin-left: 5px;
-      vertical-align: middle;
-      color: inherit;
-    }
+    .title-group { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { font-size: 2rem; }
+    h1 { margin: 0; font-weight: 700; font-size: 1.8rem; letter-spacing: 0.5px; line-height: 1; }
+    .pro-badge { font-size: 0.5em; font-weight: 700; text-transform: uppercase; opacity: 0.6; margin-left: 5px; vertical-align: middle; color: inherit; }
 
     .controls { display: flex; gap: 10px; }
 
@@ -108,6 +85,21 @@
       cursor: pointer;
     }
     body.light select { background: white; color: #333; border: 1px solid #ccc; }
+
+    /* --- TIMER (UPDATED WITH GLASS EFFECT) --- */
+    #timer {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-size: 1.1rem;
+      /* Glass Effect styles */
+      padding: 8px 16px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: var(--glass-border);
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
 
     /* --- CHAT BOX --- */
     #chat-box {
@@ -149,6 +141,28 @@
       border-bottom-right-radius: 4px;
       font-weight: 500;
     }
+
+    /* --- DIFFICULTY BADGES --- */
+    .diff-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+        letter-spacing: 0.5px;
+    }
+    .diff-easy { background: rgba(67, 233, 123, 0.2); color: #006400; border: 1px solid #006400; }
+    .diff-medium { background: rgba(255, 206, 86, 0.2); color: #8B4500; border: 1px solid #8B4500; }
+    .diff-hard { background: rgba(255, 94, 98, 0.2); color: #8B0000; border: 1px solid #8B0000; }
+    .diff-practical { background: rgba(54, 209, 220, 0.2); color: #005f6b; border: 1px solid #005f6b; }
+    
+    body:not(.light) .diff-easy { color: #ccffcc; border-color: #ccffcc; }
+    body:not(.light) .diff-medium { color: #ffeebb; border-color: #ffeebb; }
+    body:not(.light) .diff-hard { color: #ffcccc; border-color: #ffcccc; }
+    body:not(.light) .diff-practical { color: #ccffff; border-color: #ccffff; }
+
 
     /* --- ACTION BAR --- */
     .action-bar {
@@ -237,7 +251,6 @@
       color: #ffcccb;
     }
 
-    /* Fixed Hiring Probability Badge */
     .prob-badge {
       font-size: 2rem;
       font-weight: 700;
@@ -280,6 +293,11 @@
       </div>
     </header>
 
+    <div class="action-bar" style="margin-bottom:10px; justify-content: space-between;">
+        <button class="btn-theme" onclick="toggleTheme()">🌓 Theme</button>
+        <div id="timer">⏱ 00:00</div>
+    </div>
+
     <div id="chat-box">
       <div style="text-align:center; color:rgba(255,255,255,0.5); margin-top:150px;">
         Select a topic and length above,<br>then click <strong>Start Interview</strong>.
@@ -290,7 +308,6 @@
       <button class="btn-start" onclick="startInterview()">Start Interview</button>
       <button class="btn-speak" onclick="startListening()">🎙 Speak Answer</button>
       <button class="btn-end" onclick="endInterview()">End & Analyze</button>
-      <button class="btn-theme" onclick="toggleTheme()">🌓</button>
       <span id="status">Ready</span>
     </div>
 
@@ -338,7 +355,46 @@
 const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
 recognition.lang = "en-US";
 let chartInstance = null;
+let timerInterval = null;
 
+// --- DYNAMIC TIME LIMITS ---
+const TIME_LIMITS = {
+    "easy": 60,       
+    "medium": 90,     
+    "hard": 150,      
+    "practical": 120  
+};
+
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+// --- HELPER: Display Question with Badge & Timer ---
+function displayBotQuestion(qObj) {
+    if(!qObj) return;
+    
+    const diff = qObj.difficulty;
+    const text = qObj.text;
+    const time = TIME_LIMITS[diff] || 90;
+    
+    const badgeHtml = `<span class="diff-badge diff-${diff}">${diff}</span>`;
+    
+    const box = document.getElementById("chat-box");
+    const div = document.createElement("div");
+    div.className = "message bot";
+    div.innerHTML = `${badgeHtml}<br>${text}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    
+    startTimer(time);
+    
+    let u = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(u);
+}
+
+// --- CORE LOGIC ---
 async function startInterview() {
     document.getElementById("chat-box").innerHTML = "";
     document.getElementById("dashboard").style.display = "none";
@@ -353,7 +409,13 @@ async function startInterview() {
             body: JSON.stringify({ topic, length })
         });
         const data = await res.json();
+        
         appendMessage("bot", data.reply);
+        
+        if(data.next_question) {
+            setTimeout(() => displayBotQuestion(data.next_question), 1000);
+        }
+        
         document.getElementById("status").innerText = "Interview in Progress";
     } catch(e) {
         console.error(e);
@@ -365,6 +427,7 @@ async function sendAnswer(text) {
     if(!text) return;
     appendMessage("user", text);
     document.getElementById("status").innerText = "Thinking...";
+    clearInterval(timerInterval);
     
     try {
         const res = await fetch("/chat", {
@@ -372,8 +435,19 @@ async function sendAnswer(text) {
             body: JSON.stringify({ message: text })
         });
         const data = await res.json();
-        if(data.reply) appendMessage("bot", data.reply);
-        document.getElementById("status").innerText = "Your Turn";
+        
+        if (data.finished) {
+            appendMessage("bot", data.reply);
+            document.getElementById("status").innerText = "Done. Click End.";
+            document.getElementById("timer").innerText = "⏱ 00:00";
+            // Reset timer styles
+            document.getElementById("timer").style.color = "inherit";
+            document.getElementById("timer").style.borderColor = "var(--glass-border)";
+        } else {
+            if(data.reply) appendMessage("bot", data.reply);
+            if(data.next_question) displayBotQuestion(data.next_question);
+            document.getElementById("status").innerText = "Your Turn";
+        }
     } catch(e) {
         appendMessage("bot", "⚠️ Error connecting to AI.");
     }
@@ -393,18 +467,44 @@ function appendMessage(sender, text) {
     }
 }
 
+// --- UPDATED TIMER FUNCTION (Glass + Red at 30s) ---
+function startTimer(seconds) {
+  clearInterval(timerInterval);
+  let timeLeft = seconds;
+  const timerEl = document.getElementById("timer");
+  timerEl.innerText = "⏱ " + formatTime(timeLeft);
+  // Reset styles at start
+  timerEl.style.color = "inherit";
+  timerEl.style.borderColor = "var(--glass-border)";
+  
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    timerEl.innerText = "⏱ " + formatTime(timeLeft);
+    
+    // CHANGE COLOR AT 30 SECONDS
+    if(timeLeft <= 30) {
+        timerEl.style.color = "#ff5e62";
+        timerEl.style.borderColor = "#ff5e62"; // Make border red too for effect
+    }
+    
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      document.getElementById("status").innerText = "Time's up!";
+    }
+  }, 1000);
+}
+
 recognition.onstart = () => { document.getElementById("status").innerText = "Listening..."; };
 recognition.onresult = (e) => sendAnswer(e.results[0][0].transcript);
 function startListening() { recognition.start(); }
 
-// --- THE KILLER UX: PROGRESSIVE REVEAL + NEXT FOCUS ---
+// --- THE KILLER UX: PROGRESSIVE REVEAL ---
 async function endInterview() {
-    // 1. Disable buttons
+    clearInterval(timerInterval);
     document.querySelector(".btn-start").disabled = true;
     document.querySelector(".btn-end").disabled = true;
     document.getElementById("status").innerText = "Processing...";
     
-    // 2. Progressive Logs Animation
     const steps = [
         "Analyzing answer clarity...", 
         "Extracting key concepts...", 
@@ -439,24 +539,21 @@ async function endInterview() {
         clearInterval(loaderInterval);
         document.getElementById("status").innerText = "Analysis Complete";
 
-        // 3. Populate Dashboard
         document.getElementById("dashboard").style.display = "block";
         document.getElementById("hiringProb").innerText = data.hiring_probability + "%";
 
-        // Heatmap
         const heatmapDiv = document.getElementById("heatmap");
         heatmapDiv.innerHTML = "";
         if(data.strong_concepts) data.strong_concepts.forEach(c => heatmapDiv.innerHTML += `<div class="tag strong">✅ ${c}</div>`);
         if(data.weak_concepts) data.weak_concepts.forEach(c => heatmapDiv.innerHTML += `<div class="tag weak">⚠️ ${c}</div>`);
 
-        // Missed Keywords
         if(data.missed_keywords && data.missed_keywords.length > 0) {
             document.getElementById("missedKeywords").innerText = data.missed_keywords.join(", ");
         } else {
             document.getElementById("missedKeywords").innerText = "None! Great vocabulary.";
         }
         
-        // --- NEXT FOCUS CARD LOGIC ---
+        // Next Focus Logic
         const focusTitle = document.getElementById("focusTitle");
         const focusDesc = document.getElementById("focusDesc");
         if(data.weak_concepts && data.weak_concepts.length > 0) {
@@ -468,7 +565,6 @@ async function endInterview() {
              focusDesc.innerText = "Perfect session! Try increasing the difficulty to 'Deep' mode.";
         }
 
-        // Radar Chart
         const ctx = document.getElementById("radarChart").getContext('2d');
         if(chartInstance) chartInstance.destroy();
         chartInstance = new Chart(ctx, {
@@ -503,7 +599,6 @@ async function endInterview() {
             }
         });
         
-        // Auto-scroll logic
         setTimeout(() => {
             document.getElementById("dashboard").scrollIntoView({ behavior: 'smooth' });
             document.querySelector(".btn-start").disabled = false;
