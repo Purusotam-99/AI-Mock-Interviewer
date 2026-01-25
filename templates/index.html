@@ -64,10 +64,11 @@
       margin: 10px 0;
     }
 
-    #timer { font-weight: bold; }
+    #timer { font-weight: bold; font-size: 1.1rem; }
 
     #chat-box {
       flex: 1;
+      height: 400px;
       background: rgba(0,0,0,0.25);
       border-radius: 15px;
       padding: 15px;
@@ -81,25 +82,41 @@
       border-radius: 14px;
       margin: 8px 0;
       line-height: 1.4;
+      position: relative;
     }
 
     .bot {
       background: linear-gradient(135deg, #4facfe, #00f2fe);
       color: #000;
       align-self: flex-start;
+      margin-right: auto;
     }
 
     .user {
       background: linear-gradient(135deg, #43e97b, #38f9d7);
       color: #000;
       align-self: flex-end;
+      margin-left: auto;
+      text-align: right;
     }
 
-    .score-label {
-      font-size: 0.8rem;
-      color: #222;
-      margin-top: 4px;
-      font-weight: bold;
+    .feedback-box {
+      font-size: 0.85rem;
+      background: rgba(0,0,0,0.1);
+      margin-top: 5px;
+      padding: 5px;
+      border-radius: 6px;
+      border-left: 3px solid #ff5e62;
+    }
+
+    .score-badge {
+      display: inline-block;
+      background: #222;
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-top: 5px;
     }
 
     .progress-container {
@@ -126,6 +143,7 @@
       background: linear-gradient(135deg, #ff9966, #ff5e62);
       color: #000;
       box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+      font-weight: 600;
     }
 
     button.secondary {
@@ -135,12 +153,15 @@
     #status {
       font-size: 0.85rem;
       color: #e0e0e0;
-      margin-left: auto;
+      margin-left: 10px;
     }
 
-    #dashboard, #growthBox {
+    #dashboard {
       display: none;
       margin-top: 15px;
+      background: rgba(0,0,0,0.2);
+      padding: 15px;
+      border-radius: 12px;
     }
   </style>
 </head>
@@ -170,14 +191,14 @@
           <option value="ds">Data Structures</option>
           <option value="system">System Design</option>
           <option value="sql">SQL</option>
-          <option value="hr">HR</option>
+          <option value="hr">General</option>
         </select>
       </div>
     </header>
 
     <div class="top-bar">
       <button class="secondary" onclick="toggleTheme()">🌓 Theme</button>
-      <div id="timer">⏱ 00:30</div>
+      <div id="timer">⏱ 02:00</div>
     </div>
 
     <div class="progress-container">
@@ -186,7 +207,7 @@
 
     <div id="chat-box"></div>
 
-    <div>
+    <div style="margin-top: 10px;">
       <button onclick="startInterview()">Start</button>
       <button class="secondary" onclick="startListening()">🎙 Speak</button>
       <button class="secondary" onclick="endInterview()">End</button>
@@ -195,186 +216,195 @@
 
     <div id="dashboard">
       <h3>📊 Performance Dashboard</h3>
-      <p>Average Score: <span id="avgScore"></span></p>
-      <p>Total Questions: <span id="totalQ"></span></p>
-      <p>Filler Words: <span id="fillers"></span></p>
-      <p>Rating: <span id="rating"></span></p>
-      <p>Hiring Probability: <span id="hiringProb"></span>%</p>
-
-      <canvas id="scoreChart" height="120"></canvas>
-    </div>
-
-    <div id="growthBox">
-      <h3>📈 Growth Tracker</h3>
-      <canvas id="growthChart" height="120"></canvas>
+      <p>Average Score: <span id="avgScore">0</span>/10</p>
+      <p>Total Questions: <span id="totalQ">0</span></p>
+      <p>Rating: <span id="rating">-</span></p>
+      <p>Hiring Probability: <span id="hiringProb">0</span>%</p>
+      <canvas id="scoreChart" height="100"></canvas>
     </div>
 
   </div>
 
 <script>
 let questionCount = 0;
-let timeLeft = 50;
+// --- CHANGED: Default time set to 120 seconds (2 minutes) ---
+let timeLeft = 120; 
 let timerInterval = null;
-let interviewHistory = [];
-const maxQuestions = 10;
-
 let chartInstance = null;
-let growthChart = null;
 
+// Speech Recognition Setup
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = new SpeechRecognition();
 recognition.lang = "en-US";
 
-function appendMessage(sender, text, score = null) {
+// --- NEW HELPER: Format seconds into MM:SS ---
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function appendMessage(sender, text, feedback = null, score = null) {
   const box = document.getElementById("chat-box");
   const div = document.createElement("div");
   div.className = "message " + sender;
 
+  let content = `<div>${text}</div>`;
+
   if (sender === "bot" && score !== null) {
-    div.innerHTML = `${text}<div class="score-label">📝 Score: ${score}/10</div>`;
-  } else {
-    div.textContent = text;
+    content += `<div class="score-badge">📝 Score: ${score}/10</div>`;
+  }
+  if (sender === "bot" && feedback) {
+    content += `<div class="feedback-box">💡 ${feedback}</div>`;
   }
 
+  div.innerHTML = content;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 
-  // 🔊 Interviewer voice
   if (sender === "bot") {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.95;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-
+    utterance.rate = 1.0;
     const voices = speechSynthesis.getVoices();
     const preferred = voices.find(v => v.lang.includes("en"));
     if (preferred) utterance.voice = preferred;
-
     window.speechSynthesis.speak(utterance);
   }
 }
 
 function updateProgress() {
-  const percent = Math.min((questionCount / maxQuestions) * 100, 100);
+  const percent = Math.min((questionCount / 10) * 100, 100);
   document.getElementById("progress-bar").style.width = percent + "%";
 }
 
+// --- UPDATED TIMER FUNCTION ---
 function startTimer() {
   clearInterval(timerInterval);
-  timeLeft = 30;
-  document.getElementById("timer").innerText = "⏱ 00:" + timeLeft;
+  timeLeft = 120; // Reset to 2 minutes
+  document.getElementById("timer").innerText = "⏱ " + formatTime(timeLeft);
+  
   timerInterval = setInterval(() => {
     timeLeft--;
-    document.getElementById("timer").innerText = "⏱ 00:" + timeLeft;
+    document.getElementById("timer").innerText = "⏱ " + formatTime(timeLeft);
     if (timeLeft <= 0) {
       clearInterval(timerInterval);
-      sendAnswer("(No answer)");
+      document.getElementById("status").innerText = "Time's up! Speak now.";
     }
   }, 1000);
 }
 
 async function startInterview() {
   questionCount = 0;
-  interviewHistory = [];
   updateProgress();
   document.getElementById("chat-box").innerHTML = "";
+  document.getElementById("dashboard").style.display = "none";
 
-  const role = roleSelect.value;
-  const difficulty = difficultySelect.value;
-  const topic = topicSelect.value;
+  const role = document.getElementById("roleSelect").value;
+  const difficulty = document.getElementById("difficultySelect").value;
+  const topic = document.getElementById("topicSelect").value;
 
-  const res = await fetch("/start_interview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ role, difficulty, topic })
-  });
+  document.getElementById("status").innerText = "Connecting...";
 
-  const data = await res.json();
-  appendMessage("bot", data.response);
-  interviewHistory.push({ question: data.response });
-  startTimer();
+  try {
+    const res = await fetch("/start_interview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, difficulty, topic })
+    });
+
+    const data = await res.json();
+    appendMessage("bot", data.reply || data.response); 
+    startTimer();
+    document.getElementById("status").innerText = "Interview Started";
+  } catch (err) {
+    console.error(err);
+    document.getElementById("status").innerText = "Error starting interview.";
+  }
 }
 
 async function sendAnswer(text) {
+  if(!text) return;
+  
   appendMessage("user", text);
-  interviewHistory[interviewHistory.length - 1].answer = text;
+  document.getElementById("status").innerText = "Analyzing...";
 
-  const res = await fetch("/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: text })
-  });
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text })
+    });
 
-  const data = await res.json();
+    const data = await res.json();
+    appendMessage("bot", data.reply, data.feedback, data.score);
 
-  appendMessage("bot", data.response, data.score);
+    questionCount++;
+    updateProgress();
+    startTimer();
+    document.getElementById("status").innerText = "Your turn";
 
-  interviewHistory[interviewHistory.length - 1].score = data.score || 7;
-
-  questionCount++;
-  updateProgress();
-  startTimer();
-
-  if (questionCount >= maxQuestions) endInterview();
-  else interviewHistory.push({ question: data.response });
+  } catch (err) {
+    console.error(err);
+    appendMessage("bot", "Error connecting to server.");
+  }
 }
 
-recognition.onresult = (e) => sendAnswer(e.results[0][0].transcript);
-function startListening() { recognition.start(); }
+recognition.onstart = () => { document.getElementById("status").innerText = "Listening..."; };
+recognition.onend = () => { document.getElementById("status").innerText = "Processing..."; };
+recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    sendAnswer(transcript);
+};
 
-async function loadDashboard() {
+function startListening() { 
+    try { recognition.start(); } catch(e) { console.log("Mic already active"); }
+}
+
+async function endInterview() {
+  clearInterval(timerInterval);
+  document.getElementById("status").innerText = "Fetching results...";
+  
   const res = await fetch("/analytics");
   const data = await res.json();
-  if (data.error) return;
+  
+  if (data.error) {
+    alert("No data to show yet!");
+    return;
+  }
 
-  dashboard.style.display = "block";
-  growthBox.style.display = "block";
+  document.getElementById("dashboard").style.display = "block";
+  document.getElementById("chat-box").innerHTML += `<div style="text-align:center; padding:10px;">--- Interview Ended ---</div>`;
 
-  avgScore.innerText = data.average_score;
-  totalQ.innerText = data.total_questions;
-  fillers.innerText = data.total_filler_words;
-  rating.innerText = data.rating;
-  hiringProb.innerText = data.hiring_probability;
+  document.getElementById("avgScore").innerText = data.average_score;
+  document.getElementById("totalQ").innerText = data.total_questions;
+  document.getElementById("rating").innerText = data.rating;
+  document.getElementById("hiringProb").innerText = data.hiring_probability;
 
-  renderScoreChart(data.chart_scores);
-  renderGrowthTracker(data.sessions);
+  renderScoreChart(data.details.map(d => d.score));
 }
 
 function renderScoreChart(scores) {
-  const ctx = scoreChart.getContext("2d");
+  const ctx = document.getElementById("scoreChart").getContext("2d");
   if (chartInstance) chartInstance.destroy();
 
   chartInstance = new Chart(ctx, {
     type: "line",
     data: {
       labels: scores.map((_, i) => "Q" + (i + 1)),
-      datasets: [{ label: "Score", data: scores, borderWidth: 2 }]
+      datasets: [{ 
+          label: "Score Trend", 
+          data: scores, 
+          borderColor: "#43e97b",
+          backgroundColor: "rgba(67, 233, 123, 0.2)",
+          fill: true,
+          tension: 0.4 
+      }]
     },
-    options: { scales: { y: { min: 0, max: 10 } } }
+    options: { 
+        scales: { y: { min: 0, max: 10, grid: { color: "rgba(255,255,255,0.1)" } }, x: { grid: { display: false } } },
+        plugins: { legend: { labels: { color: 'white' } } }
+    }
   });
-}
-
-function renderGrowthTracker(sessions) {
-  const ctx = growthChart.getContext("2d");
-  if (growthChart) growthChart.destroy();
-
-  growthChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: sessions.map((_, i) => "Session " + (i + 1)),
-      datasets: [
-        { label: "Avg Score", data: sessions.map(s => s.avg_score), borderWidth: 2 },
-        { label: "Hiring %", data: sessions.map(s => s.hiring_probability), borderWidth: 2 }
-      ]
-    },
-    options: { scales: { y: { min: 0, max: 100 } } }
-  });
-}
-
-function endInterview() {
-  clearInterval(timerInterval);
-  appendMessage("bot", "Interview completed! Generating analytics...");
-  loadDashboard();
 }
 
 function toggleTheme() {
