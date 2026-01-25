@@ -44,7 +44,7 @@ Example Output:
 
 # Use the FLASH model for speed (it supports JSON mode natively)
 model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash-lite",
+    model_name="gemini-3-flash-preview",
     generation_config=generation_config,
     system_instruction=system_prompt
 )
@@ -137,3 +137,4 @@ def analytics():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
