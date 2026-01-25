@@ -156,7 +156,8 @@
       margin-left: 10px;
     }
 
-    #dashboard {
+    /* CSS for both Dashboard and Growth Tracker */
+    #dashboard, #growthBox {
       display: none;
       margin-top: 15px;
       background: rgba(0,0,0,0.2);
@@ -223,21 +224,36 @@
       <canvas id="scoreChart" height="100"></canvas>
     </div>
 
+    <div id="growthBox">
+        <h3>📈 Growth Tracker (History)</h3>
+        <canvas id="growthChart" height="100"></canvas>
+        <button onclick="clearHistory()" style="margin-top:10px; background:#444; font-size:0.8rem;">Reset History</button>
+    </div>
+
   </div>
 
 <script>
 let questionCount = 0;
-// --- CHANGED: Default time set to 120 seconds (2 minutes) ---
-let timeLeft = 120; 
+let timeLeft = 120; // 2 Minutes
 let timerInterval = null;
 let chartInstance = null;
+let growthChart = null;
 
-// Speech Recognition Setup
+// --- 1. Load History from Browser Memory ---
+let sessionHistory = JSON.parse(localStorage.getItem("mockInterviewHistory")) || [];
+
+// Check on page load if we have history to show
+window.onload = function() {
+    if(sessionHistory.length > 0) {
+        document.getElementById("growthBox").style.display = "block";
+        renderGrowthTracker(sessionHistory);
+    }
+};
+
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = new SpeechRecognition();
 recognition.lang = "en-US";
 
-// --- NEW HELPER: Format seconds into MM:SS ---
 function formatTime(seconds) {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -277,10 +293,9 @@ function updateProgress() {
   document.getElementById("progress-bar").style.width = percent + "%";
 }
 
-// --- UPDATED TIMER FUNCTION ---
 function startTimer() {
   clearInterval(timerInterval);
-  timeLeft = 120; // Reset to 2 minutes
+  timeLeft = 120; 
   document.getElementById("timer").innerText = "⏱ " + formatTime(timeLeft);
   
   timerInterval = setInterval(() => {
@@ -298,7 +313,8 @@ async function startInterview() {
   updateProgress();
   document.getElementById("chat-box").innerHTML = "";
   document.getElementById("dashboard").style.display = "none";
-
+  // Keep growth box visible if history exists
+  
   const role = document.getElementById("roleSelect").value;
   const difficulty = document.getElementById("difficultySelect").value;
   const topic = document.getElementById("topicSelect").value;
@@ -372,7 +388,20 @@ async function endInterview() {
     return;
   }
 
+  // --- 2. Save New Data to Browser Memory ---
+  const newSession = {
+      date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+      score: data.average_score,
+      hiring_prob: data.hiring_probability
+  };
+  
+  sessionHistory.push(newSession);
+  localStorage.setItem("mockInterviewHistory", JSON.stringify(sessionHistory));
+  // ------------------------------------------
+
   document.getElementById("dashboard").style.display = "block";
+  document.getElementById("growthBox").style.display = "block";
+
   document.getElementById("chat-box").innerHTML += `<div style="text-align:center; padding:10px;">--- Interview Ended ---</div>`;
 
   document.getElementById("avgScore").innerText = data.average_score;
@@ -381,6 +410,7 @@ async function endInterview() {
   document.getElementById("hiringProb").innerText = data.hiring_probability;
 
   renderScoreChart(data.details.map(d => d.score));
+  renderGrowthTracker(sessionHistory);
 }
 
 function renderScoreChart(scores) {
@@ -407,10 +437,52 @@ function renderScoreChart(scores) {
   });
 }
 
+// --- 3. Render Growth Chart ---
+function renderGrowthTracker(historyData) {
+  const ctx = document.getElementById("growthChart").getContext("2d");
+  if (growthChart) growthChart.destroy();
+
+  growthChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      // Use Session number as label
+      labels: historyData.map((s, i) => "Session " + (i + 1)), 
+      datasets: [
+        { 
+            label: "Avg Score", 
+            data: historyData.map(s => s.score), 
+            borderColor: "#36d1dc", 
+            borderWidth: 2,
+            tension: 0.3
+        },
+        { 
+            label: "Hiring %", 
+            data: historyData.map(s => s.hiring_prob / 10), // Scale down to match score graph (0-10)
+            borderColor: "#ff9966", 
+            borderWidth: 2,
+            borderDash: [5, 5],
+            tension: 0.3
+        }
+      ]
+    },
+    options: { 
+        scales: { y: { min: 0, max: 10, grid: { color: "rgba(255,255,255,0.1)" } } },
+        plugins: { legend: { labels: { color: 'white' } } }
+    }
+  });
+}
+
+function clearHistory() {
+    if(confirm("Clear all interview history?")) {
+        localStorage.removeItem("mockInterviewHistory");
+        sessionHistory = [];
+        document.getElementById("growthBox").style.display = "none";
+    }
+}
+
 function toggleTheme() {
   document.body.classList.toggle("light");
 }
 </script>
 </body>
 </html>
-
