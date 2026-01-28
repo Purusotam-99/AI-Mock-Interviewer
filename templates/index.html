@@ -57,6 +57,33 @@
       gap: 20px;
     }
 
+    /* --- MOBILE WARNING STYLES (Added) --- */
+    #mobile-warning { display: none; }
+
+    @media screen and (max-width: 1024px) {
+        /* Hide the main app on small screens */
+        .app-container { display: none !important; }
+        
+        /* Show the warning overlay */
+        #mobile-warning {
+            display: flex;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100vh;
+            background: #0f172a;
+            color: white;
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 30px;
+        }
+        #mobile-warning h2 { font-size: 1.5rem; color: #ff5e62; margin-bottom: 10px; }
+        #mobile-warning p { font-size: 1rem; opacity: 0.8; line-height: 1.6; max-width: 300px; }
+        #mobile-warning .icon { font-size: 3rem; margin-bottom: 20px; }
+    }
+
     /* --- HEADER --- */
     header {
       display: flex;
@@ -270,6 +297,16 @@
   </style>
 </head>
 <body>
+
+  <div id="mobile-warning">
+    <div class="icon">💻</div>
+    <h2>Desktop Experience Required</h2>
+    <p>
+      <strong>AI Interviewer Pro</strong> is optimized for Laptop/PC screens.
+      <br><br>
+      Please switch to <strong>"Desktop Site"</strong> mode in your browser settings to continue.
+    </p>
+  </div>
 
   <div class="app-container">
     <header>
@@ -582,7 +619,10 @@ async function endInterview() {
                     ],
                     backgroundColor: 'rgba(67, 233, 123, 0.2)',
                     borderColor: '#43e97b',
-                    pointBackgroundColor: '#fff'
+                    pointBackgroundColor: '#43e97b',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#43e97b'
                 }]
             },
             options: {
@@ -590,30 +630,31 @@ async function endInterview() {
                     r: {
                         angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        pointLabels: { color: 'rgba(255, 255, 255, 0.7)', font: { size: 12 } },
-                        ticks: { display: false, backdropColor: 'transparent' },
-                        min: 0, max: 10
+                        pointLabels: { color: '#ffffff', font: { size: 12 } },
+                        ticks: { backdropColor: 'transparent', color: 'transparent' }
                     }
                 },
                 plugins: { legend: { display: false } }
             }
         });
-        
-        setTimeout(() => {
-            document.getElementById("dashboard").scrollIntoView({ behavior: 'smooth' });
-            document.querySelector(".btn-start").disabled = false;
-            document.querySelector(".btn-end").disabled = false;
-        }, 500);
-
-    } catch (err) {
+    } catch(e) {
         clearInterval(loaderInterval);
-        console.error(err);
-        alert("Failed to generate report.");
+        console.error(e);
+        document.getElementById("status").innerText = "Error loading analytics";
     }
 }
 
 function toggleTheme() {
-    document.body.classList.toggle("light");
+    document.body.classList.toggle('light');
+    const isLight = document.body.classList.contains('light');
+    
+    // Update Chart colors if chart exists
+    if(chartInstance) {
+        chartInstance.options.scales.r.pointLabels.color = isLight ? '#333' : '#fff';
+        chartInstance.options.scales.r.grid.color = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
+        chartInstance.options.scales.r.angleLines.color = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
+        chartInstance.update();
+    }
 }
 </script>
 </body>
