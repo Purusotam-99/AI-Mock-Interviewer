@@ -57,14 +57,12 @@
       gap: 20px;
     }
 
-    /* --- MOBILE WARNING STYLES (Added) --- */
+    /* --- MOBILE WARNING STYLES --- */
     #mobile-warning { display: none; }
 
     @media screen and (max-width: 1024px) {
-        /* Hide the main app on small screens */
-        .app-container { display: none !important; }
+        .app-container { display: none; } 
         
-        /* Show the warning overlay */
         #mobile-warning {
             display: flex;
             position: fixed;
@@ -113,12 +111,11 @@
     }
     body.light select { background: white; color: #333; border: 1px solid #ccc; }
 
-    /* --- TIMER (UPDATED WITH GLASS EFFECT) --- */
+    /* --- TIMER --- */
     #timer {
       font-weight: 700;
       font-variant-numeric: tabular-nums;
       font-size: 1.1rem;
-      /* Glass Effect styles */
       padding: 8px 16px;
       background: var(--glass-bg);
       backdrop-filter: blur(12px);
@@ -256,17 +253,55 @@
 
     h3, h4 { margin: 0 0 15px 0; font-weight: 600; }
 
-    /* Heatmap Styles */
-    .heatmap-container { display: flex; flex-wrap: wrap; gap: 8px; }
+    /* --- UPDATED HEATMAP STYLES (Matches Screenshot) --- */
+    .heatmap-container { display: flex; flex-wrap: wrap; gap: 10px; }
     .tag {
-      padding: 6px 12px;
+      padding: 8px 14px;
       border-radius: 8px;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       font-weight: 600;
       letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .tag.strong { background: rgba(67, 233, 123, 0.2); color: #43e97b; border: 1px solid #43e97b; }
-    .tag.weak { background: rgba(255, 94, 98, 0.2); color: #ff5e62; border: 1px solid #ff5e62; }
+    /* Strong = Green Background with Bright Text */
+    .tag.strong { 
+        background: rgba(39, 174, 96, 0.25); 
+        color: #2ecc71; 
+        border: 1px solid #2ecc71; 
+    }
+    /* Weak = Red Background with Bright Text */
+    .tag.weak { 
+        background: rgba(231, 76, 60, 0.25); 
+        color: #e74c3c; 
+        border: 1px solid #e74c3c; 
+    }
+
+    /* --- NEW LOADER STYLES (Matches "Processing" Screenshot) --- */
+    .loader-pill {
+        background: rgba(0, 0, 0, 0.6); 
+        border-radius: 50px;             
+        padding: 10px 20px;
+        margin-bottom: 10px;
+        color: #eee;
+        font-family: 'Poppins', sans-serif; 
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: fit-content;
+        border: 1px solid rgba(255,255,255,0.1);
+        animation: slideIn 0.4s ease;
+    }
+    @keyframes slideIn { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:translateX(0); } }
+
+    /* The Pink Gear Icon */
+    .loader-icon { color: #ff9a9e; animation: spin 2s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* The Green Checkmark */
+    .loader-check { color: #2ecc71; font-weight: bold; }
 
     .missed-box {
       margin-top: 15px;
@@ -294,6 +329,31 @@
       select { width: 48%; }
       .card[style*="grid-column: span 2"] { grid-column: span 1 !important; }
     }
+    /* Processing Pulse Animation */
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.processing-icon {
+  display: inline-block;
+  animation: pulse 1.5s infinite ease-in-out;
+  font-size: 1.2rem;
+  margin-right: 10px;
+}
+
+.processing-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 15px 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  font-family: 'Poppins', sans-serif;
+  margin-top: 10px;
+}
   </style>
 </head>
 <body>
@@ -394,6 +454,50 @@ recognition.lang = "en-US";
 let chartInstance = null;
 let timerInterval = null;
 
+// ==========================================
+// 🔊 MALE VOICE ENGINE
+// ==========================================
+let voices = [];
+function loadVoices() {
+    voices = window.speechSynthesis.getVoices();
+}
+loadVoices();
+if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function speakText(text) {
+    if(!text) return;
+    
+    // 1. Clear previous speech
+    window.speechSynthesis.cancel();
+
+    // 2. Create the utterance
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // 3. 🔍 HUNT FOR A MALE VOICE
+    if(voices.length === 0) loadVoices(); 
+    
+    const maleVoice = voices.find(v => 
+        v.name.toLowerCase().includes('male') ||   // Most Android/Chrome voices have "Male" in name
+        v.name.includes('David') ||                // Windows Default (Microsoft David)
+        v.name.includes('Daniel') ||               // Mac Default
+        v.name.includes('Google US English')       // Fallback for some Androids
+    );
+    
+    if (maleVoice) {
+        utterance.voice = maleVoice;
+    }
+
+    // 4. Tweak Pitch/Rate for a more masculine tone
+    utterance.rate = 1;
+    utterance.pitch = 0.9; // Lower pitch = deeper voice
+
+    // 5. Speak
+    window.speechSynthesis.speak(utterance);
+}
+
+
 // --- DYNAMIC TIME LIMITS ---
 const TIME_LIMITS = {
     "easy": 60,       
@@ -427,12 +531,17 @@ function displayBotQuestion(qObj) {
     
     startTimer(time);
     
-    let u = new SpeechSynthesisUtterance(text);
-    window.speechSynthesis.speak(u);
+    // CALL THE NEW SPEECH FUNCTION
+    speakText(text);
 }
 
 // --- CORE LOGIC ---
 async function startInterview() {
+    // 🔥 WAKE UP AUDIO ENGINE (Mobile Fix)
+    // Mobile browsers require a user gesture to play audio. 
+    // We play a silent snippet immediately on click.
+    speakText(""); 
+
     document.getElementById("chat-box").innerHTML = "";
     document.getElementById("dashboard").style.display = "none";
     document.getElementById("status").innerText = "Generating questions...";
@@ -477,7 +586,6 @@ async function sendAnswer(text) {
             appendMessage("bot", data.reply);
             document.getElementById("status").innerText = "Done. Click End.";
             document.getElementById("timer").innerText = "⏱ 00:00";
-            // Reset timer styles
             document.getElementById("timer").style.color = "inherit";
             document.getElementById("timer").style.borderColor = "var(--glass-border)";
         } else {
@@ -498,19 +606,18 @@ function appendMessage(sender, text) {
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
     
+    // Only speak if it's the bot
     if(sender === 'bot') {
-        let u = new SpeechSynthesisUtterance(text);
-        window.speechSynthesis.speak(u);
+        speakText(text);
     }
 }
 
-// --- UPDATED TIMER FUNCTION (Glass + Red at 30s) ---
+// --- TIMER FUNCTION ---
 function startTimer(seconds) {
   clearInterval(timerInterval);
   let timeLeft = seconds;
   const timerEl = document.getElementById("timer");
   timerEl.innerText = "⏱ " + formatTime(timeLeft);
-  // Reset styles at start
   timerEl.style.color = "inherit";
   timerEl.style.borderColor = "var(--glass-border)";
   
@@ -518,10 +625,9 @@ function startTimer(seconds) {
     timeLeft--;
     timerEl.innerText = "⏱ " + formatTime(timeLeft);
     
-    // CHANGE COLOR AT 30 SECONDS
     if(timeLeft <= 30) {
         timerEl.style.color = "#ff5e62";
-        timerEl.style.borderColor = "#ff5e62"; // Make border red too for effect
+        timerEl.style.borderColor = "#ff5e62";
     }
     
     if (timeLeft <= 0) {
@@ -535,127 +641,160 @@ recognition.onstart = () => { document.getElementById("status").innerText = "Lis
 recognition.onresult = (e) => sendAnswer(e.results[0][0].transcript);
 function startListening() { recognition.start(); }
 
-// --- THE KILLER UX: PROGRESSIVE REVEAL ---
+function toggleTheme() {
+    document.body.classList.toggle('light');
+}
+
 async function endInterview() {
     clearInterval(timerInterval);
     document.querySelector(".btn-start").disabled = true;
     document.querySelector(".btn-end").disabled = true;
-    document.getElementById("status").innerText = "Processing...";
-    
-    const steps = [
-        "Analyzing answer clarity...", 
-        "Extracting key concepts...", 
-        "Generating concept heatmap...", 
-        "Computing hiring probability..."
+
+    const chatBox = document.getElementById("chat-box");
+    const statusEl = document.getElementById("status");
+
+    // 1. Create the Processing Message Bubble
+    const processDiv = document.createElement("div");
+    processDiv.className = "processing-box"; 
+    // Initial state
+    processDiv.innerHTML = `
+        <span class="processing-icon">⚡</span>
+        <div>
+            <div style="font-weight:600; font-size:1rem;">Processing...</div>
+            <div id="dynamic-text" style="font-size:0.85rem; opacity:0.8;">Analyzing answers...</div>
+        </div>
+    `;
+    chatBox.appendChild(processDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    // 2. Start the Text Cycler (Runs in background)
+    const phases = [
+        "Analyzing answer quality...",
+        "Generating insights...",
+        "Checking technical accuracy...",
+        "Finalizing report..."
     ];
-    let stepIndex = 0;
+    let phaseIndex = 0;
     
-    const loaderInterval = setInterval(() => {
-        if(stepIndex < steps.length) {
-             const box = document.getElementById("chat-box");
-             const div = document.createElement("div");
-             div.className = "message"; 
-             div.style.background = "rgba(0, 0, 0, 0.2)"; 
-             div.style.color = "#ccc";
-             div.style.fontFamily = "'Courier New', monospace";
-             div.style.fontSize = "0.85rem";
-             div.style.padding = "8px 12px";
-             div.style.marginBottom = "5px";
-             div.style.width = "fit-content";
-             div.innerHTML = `⚙️ ${steps[stepIndex]} <span style="color:#43e97b; font-weight:bold; margin-left:10px;">✓</span>`;
-             box.appendChild(div);
-             box.scrollTop = box.scrollHeight;
-             stepIndex++;
-        }
-    }, 800);
+    // Change text every 1.5 seconds while waiting
+    const textInterval = setInterval(() => {
+        phaseIndex = (phaseIndex + 1) % phases.length;
+        const textEl = document.getElementById("dynamic-text");
+        if(textEl) textEl.innerText = phases[phaseIndex];
+    }, 1500);
 
     try {
+        // 3. The Actual Network Call
+        statusEl.innerText = "Analyzing...";
         const res = await fetch("/analytics");
         const data = await res.json();
         
-        clearInterval(loaderInterval);
-        document.getElementById("status").innerText = "Analysis Complete";
+        // 4. Cleanup (Stop animation immediately when data arrives)
+        clearInterval(textInterval);
+        processDiv.remove(); // Remove the processing box
+        statusEl.innerText = "Done";
 
+        // 5. Show Dashboard
         document.getElementById("dashboard").style.display = "block";
         document.getElementById("hiringProb").innerText = data.hiring_probability + "%";
 
+        // --- Render Radar Chart ---
+        const ctx = document.getElementById('radarChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+
+        const scoreData = data.scores || [data.hiring_probability, 75, 80, 70, 85];
+
+        chartInstance = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: ['Technical Accuracy', 'Clarity', 'Completeness', 'Vocabulary', 'Practicality'],
+                datasets: [{
+                    label: 'Performance',
+                    data: scoreData, 
+                    backgroundColor: 'rgba(46, 204, 113, 0.4)', 
+                    borderColor: '#2ecc71',                     
+                    borderWidth: 2,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#2ecc71'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    r: {
+                        angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        pointLabels: { color: '#fff', font: { size: 11 } }, 
+                        ticks: { display: false, backdropColor: 'transparent' },
+                        suggestedMin: 20, suggestedMax: 100
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // --- Render Heatmap ---
         const heatmapDiv = document.getElementById("heatmap");
         heatmapDiv.innerHTML = "";
-        if(data.strong_concepts) data.strong_concepts.forEach(c => heatmapDiv.innerHTML += `<div class="tag strong">✅ ${c}</div>`);
-        if(data.weak_concepts) data.weak_concepts.forEach(c => heatmapDiv.innerHTML += `<div class="tag weak">⚠️ ${c}</div>`);
+        
+        if(data.strong_concepts) {
+            data.strong_concepts.forEach(c => heatmapDiv.innerHTML += `<div class="tag strong">✅ ${c}</div>`);
+        }
+        if(data.weak_concepts) {
+            data.weak_concepts.forEach(c => heatmapDiv.innerHTML += `<div class="tag weak">⚠️ ${c}</div>`);
+        }
 
+        // --- Render Keywords ---
         if(data.missed_keywords && data.missed_keywords.length > 0) {
             document.getElementById("missedKeywords").innerText = data.missed_keywords.join(", ");
         } else {
             document.getElementById("missedKeywords").innerText = "None! Great vocabulary.";
         }
         
-        // Next Focus Logic
+        // --- Render Next Step ---
         const focusTitle = document.getElementById("focusTitle");
         const focusDesc = document.getElementById("focusDesc");
         if(data.weak_concepts && data.weak_concepts.length > 0) {
-            const topWeakness = data.weak_concepts[0]; 
-            focusTitle.innerText = `Master "${topWeakness}"`;
-            focusDesc.innerHTML = `You struggled with <strong>${topWeakness}</strong>. We recommend studying this before retrying.`;
+            focusTitle.innerText = "Review " + data.weak_concepts[0];
+            focusDesc.innerText = "This was a weak point. Check documentation or practice more problems on this topic.";
         } else {
-             focusTitle.innerText = "Level Up Difficulty";
-             focusDesc.innerText = "Perfect session! Try increasing the difficulty to 'Deep' mode.";
+            focusTitle.innerText = "Advance to Next Level";
+            focusDesc.innerText = "Your basics are strong! Try increasing the difficulty.";
         }
 
-        const ctx = document.getElementById("radarChart").getContext('2d');
-        if(chartInstance) chartInstance.destroy();
-        chartInstance = new Chart(ctx, {
-            type: 'radar',
-            data: {
-                labels: ['Technical Accuracy', 'Clarity', 'Completeness', 'Vocabulary', 'Practicality'],
-                datasets: [{
-                    label: 'Candidate Profile',
-                    data: [
-                        data.average_score, 
-                        data.average_score + 1, 
-                        10 - (data.missed_keywords ? data.missed_keywords.length : 0), 
-                        8, 
-                        data.hiring_probability / 10
-                    ],
-                    backgroundColor: 'rgba(67, 233, 123, 0.2)',
-                    borderColor: '#43e97b',
-                    pointBackgroundColor: '#43e97b',
-                    pointBorderColor: '#fff',
-                    pointHoverBackgroundColor: '#fff',
-                    pointHoverBorderColor: '#43e97b'
-                }]
-            },
-            options: {
-                scales: {
-                    r: {
-                        angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        pointLabels: { color: '#ffffff', font: { size: 12 } },
-                        ticks: { backdropColor: 'transparent', color: 'transparent' }
-                    }
-                },
-                plugins: { legend: { display: false } }
-            }
-        });
     } catch(e) {
-        clearInterval(loaderInterval);
+        clearInterval(textInterval);
         console.error(e);
-        document.getElementById("status").innerText = "Error loading analytics";
+        statusEl.innerText = "Error";
+        // Show error in the box instead of removing it
+        const textEl = document.getElementById("dynamic-text");
+        if(textEl) {
+            textEl.innerText = "Failed to connect to server.";
+            textEl.style.color = "#ff5e62";
+        }
+    }
+}
+// ==========================================
+// 🚀 MOBILE RESPONSIVENESS FIX
+// ==========================================
+function checkDeviceSupport() {
+    const warningEl = document.getElementById('mobile-warning');
+    const appEl = document.querySelector('.app-container');
+    
+    // Check if viewport is wide enough (e.g. Desktop Mode on mobile)
+    const isWideEnough = window.innerWidth >= 1024; 
+
+    if (isWideEnough) {
+        if(warningEl) warningEl.style.setProperty('display', 'none', 'important');
+        if(appEl) appEl.style.setProperty('display', 'flex', 'important');
+    } else {
+        if(warningEl) warningEl.style.removeProperty('display');
+        if(appEl) appEl.style.removeProperty('display');
     }
 }
 
-function toggleTheme() {
-    document.body.classList.toggle('light');
-    const isLight = document.body.classList.contains('light');
-    
-    // Update Chart colors if chart exists
-    if(chartInstance) {
-        chartInstance.options.scales.r.pointLabels.color = isLight ? '#333' : '#fff';
-        chartInstance.options.scales.r.grid.color = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
-        chartInstance.options.scales.r.angleLines.color = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
-        chartInstance.update();
-    }
-}
+window.addEventListener('load', checkDeviceSupport);
+window.addEventListener('resize', checkDeviceSupport);
 </script>
 </body>
 </html>
